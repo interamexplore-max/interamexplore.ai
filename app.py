@@ -27,13 +27,16 @@ class TripRequest(BaseModel):
     budget: str = "בינוני / משפחתי"
     pace: str = "מאוזן"
 
+@app.get("/")
+def read_root():
+    return {"status": "Interam Explore API is running successfully!"}
+
 @app.post("/api/generate-trip")
 async def generate_trip(request: TripRequest):
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=500, detail="מפתח ה-API אינו מוגדר ב-Render.")
     
     async with httpx.AsyncClient(timeout=30.0) as client:
-        # איתור דינמי של מודל זמין מחשבון ה-API
         models_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_API_KEY}"
         model_name = "models/gemini-1.5-flash"
         try:
