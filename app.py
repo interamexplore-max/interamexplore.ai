@@ -1,9 +1,9 @@
 import os
 import json
-import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import google.generativeai as genai
 
 app = FastAPI()
 
@@ -16,6 +16,9 @@ app.add_middleware(
 )
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 class TripRequest(BaseModel):
     language: str = "עברית"
@@ -45,64 +48,41 @@ async def generate_trip(request: TripRequest):
     else:
         prompt = f"צור מסלול טיול ליעד {request.destination} למשך {request.days} ימים בעברית בלבד. החזר אך ורק אובייקט JSON טהור במבנה הבא: {json_structure}"
 
-    # שימוש בכתובת הרגילה והעברת המפתח ב-Headers עבור מפתחות מסוג AQ
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
-    
-    headers = {
-        "Authorization": f"Bearer {GEMINI_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    
-    # תמיכה גם אם המפתח הוא מסוג AIza הישן וגם מסוג AQ החדש
-    if GEMINI_API_KEY.startswith("AIza"):
-        url = f"{url}?key={GEMINI_API_KEY}"
-        headers = {"Content-Type": "application/json"}
-
-    payload = {
-        "contents": [{
-            "parts": [{"text": prompt}]
-        }]
-    }
-
-    async with httpx.AsyncClient(timeout=45.0) as client:
+    try:
+        # שימוש במודל הרשמי של גוגל דרך הספרייה שלהם
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(prompt)
+        text_response = response.text.strip()
+        
+        if text_response.startswith("```json"):
+            text_response = text_response[7:]
+        if text_response.startswith("```"):
+            text_response = text_response[3:]
+        if text_response.endswith("```"):
+            text_response = text_response[:-3]
+            
+        text_response = text_response.strip()
+        
         try:
-            response = await client.post(url, json=payload, headers=headers)
-            if response.status_code != 200:
-                print(f"Gemini API Error: {response.text}")
-                raise HTTPException(status_code=500, detail=response.text)
-            
-            res_data = response.json()
-            text_response = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
-            
-            if text_response.startswith("```json"):
-                text_response = text_response[7:]
-            if text_response.startswith("```"):
-                text_response = text_response[3:]
-            if text_response.endswith("```"):
-                text_response = text_response[:-3]
-                
-            text_response = text_response.strip()
-            
-            try:
-                parsed_data = json.loads(text_response)
-                return parsed_data
-            except json.JSONDecodeError:
-                return {
-                    "itinerary": [
-                        {
-                            "day_number": i + 1,
-                            "title": f"Day {i + 1}" if is_eng else f"יום {i + 1}",
-                            "activities": [
-                                {
-                                    "time": "09:00",
-                                    "place": request.destination,
-                                    "description": text_response[:200]
-                                }
-                            ]
-                        } for i in range(request.days)
-                    ]
-                }
-            
-        except Exception as e:
-            print(f"Exception: {str(e)}")
-            raise HTTPException(status_code=500, detail=str(e))
+            parsed_data = json.loads(text_response)
+            return parsed_data
+        except json.JSONDecodeError:
+            return {
+                "itinerary": [
+                    {
+                        "day_number": i + 1,
+                        "title": f"Day {i + 1}" if is_eng else f"יום {i + 1}",
+                        "activities": [
+                            {
+                                "time": "09:00",
+                                "place": request.destination,
+                                "description": text_response[:200]
+                            }
+                        ]
+                    } for i in range(request.days)
+                ]
+            }
+        
+    except Exception as e:
+        print(f"Exception: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
