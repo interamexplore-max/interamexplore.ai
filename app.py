@@ -45,7 +45,19 @@ async def generate_trip(request: TripRequest):
     else:
         prompt = f"צור מסלול טיול ליעד {request.destination} למשך {request.days} ימים בעברית בלבד. החזר אך ורק אובייקט JSON טהור במבנה הבא: {json_structure}"
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    # שימוש בכתובת הרגילה והעברת המפתח ב-Headers עבור מפתחות מסוג AQ
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+    
+    headers = {
+        "Authorization": f"Bearer {GEMINI_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    # תמיכה גם אם המפתח הוא מסוג AIza הישן וגם מסוג AQ החדש
+    if GEMINI_API_KEY.startswith("AIza"):
+        url = f"{url}?key={GEMINI_API_KEY}"
+        headers = {"Content-Type": "application/json"}
+
     payload = {
         "contents": [{
             "parts": [{"text": prompt}]
@@ -54,7 +66,7 @@ async def generate_trip(request: TripRequest):
 
     async with httpx.AsyncClient(timeout=45.0) as client:
         try:
-            response = await client.post(url, json=payload)
+            response = await client.post(url, json=payload, headers=headers)
             if response.status_code != 200:
                 print(f"Gemini API Error: {response.text}")
                 raise HTTPException(status_code=500, detail=response.text)
