@@ -1,5 +1,6 @@
 import os
 import time
+import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -85,7 +86,6 @@ def generate_trip(request: TripRequest):
         דאג שיהיו בדיוק {request.days} אובייקטים במערך ה-itinerary.
         """
 
-    # מנגנון ניסיון חוזר אוטומטי במקרה של עומס זמני (שגיאת 503)
     max_retries = 3
     for attempt in range(max_retries):
         try:
@@ -104,4 +104,9 @@ def generate_trip(request: TripRequest):
             print(f"Attempt {attempt + 1} failed: {str(e)}")
             if attempt == max_retries - 1:
                 raise HTTPException(status_code=500, detail=f"שגיאה ביצירת המסלול עקב עומס זמני, אנא נסה שוב בעוד רגע.")
-            time.sleep(1.5)  # המתנה קצרה לפני ניסיון חוזר
+            time.sleep(1.5)
+
+# השורה הזו דואגת שהשרת יתחבר לפורט הנכון של Render אוטומטית
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
