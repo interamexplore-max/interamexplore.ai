@@ -7,7 +7,6 @@ import json
 
 app = FastAPI()
 
-# --- הגדרת CORS שמאפשרת לאתר שלך לדבר עם השרת ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,12 +15,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# הגדרת מפתח ה-API מתוך משתני הסביבה של Render
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
 class TripRequest(BaseModel):
+    language: str = "עברית"
     destination: str
     days: int
     travelers: str
@@ -33,41 +32,42 @@ class TripRequest(BaseModel):
 @app.post("/api/generate-trip")
 def generate_trip(request: TripRequest):
     if not GEMINI_API_KEY:
-        raise HTTPException(status_code=500, detail="מפתח ה-API של Gemini אינו מוגדר בשרת.")
+        raise HTTPException(status_code=500, detail="מפתח ה-API אינו מוגדר.")
     
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
         
         prompt = f"""
-        צור מסלול טיול מפורט עבור היעד '{request.destination}' למשך {request.days} ימים.
-        תאריך הטיול: {request.date}.
-        המסלול מיועד עבור: {request.travelers}.
-        תקציב מועדף: {request.budget}.
-        קצב הטיול: {request.pace}.
-        תחומי עניין עיקריים: {request.interests}.
+        Create a detailed travel itinerary for the destination '{request.destination}' for {request.days} days.
+        Language of response: {request.language}.
+        Trip Date: {request.date}.
+        Travelers: {request.travelers}.
+        Budget: {request.budget}.
+        Pace: {request.pace}.
+        Interests: {request.interests}.
         
-        חובה להחזיר את התשובה אך ורק במבנה JSON תקין (ללא מעטפות טקסט נוספות כמו markdown) בדיוק במבנה הבא:
+        You MUST return the response ONLY as a valid JSON object (no markdown formatting like ```json, just raw JSON) matching this exact structure:
         {{
           "itinerary": [
             {{
               "day_number": 1,
-              "title": "כותרת קצרה ליום הראשון (למשל: הגעה וסיור היכרות)",
+              "title": "Short title for day 1",
               "activities": [
                 {{
                   "time": "09:00",
-                  "place": "שם המקום או האטרקציה",
-                  "description": "תיאור קצרצר על הפעילות באותו זמן"
+                  "place": "Place or attraction name",
+                  "description": "Short description of the activity"
                 }},
                 {{
                   "time": "13:00",
-                  "place": "שם המסעדה או הפעילות",
-                  "description": "תיאור קצרצר"
+                  "place": "Restaurant or activity",
+                  "description": "Short description"
                 }}
               ]
             }}
           ]
         }}
-        דאג שיהיו בדיוק {request.days} אובייקטים במערך ה-itinerary, עבור כל יום ויום מ-1 עד {request.days}.
+        Make sure there are exactly {request.days} objects in the itinerary array, for each day from 1 to {request.days}. All text fields (titles, places, descriptions) must be written in {request.language}.
         """
 
         response = model.generate_content(prompt)
@@ -83,4 +83,4 @@ def generate_trip(request: TripRequest):
 
     except Exception as e:
         print(f"Error generating trip: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"שגיאה ביצירת המסלול: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"שגיאה: {str(e)}")
