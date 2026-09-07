@@ -10,7 +10,7 @@ app = FastAPI()
 # --- הגדרת CORS שמאפשרת לאתר שלך לדבר עם השרת ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # מאפשר גישה מכל דומיין ובפרט מהאתר שלך
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -26,6 +26,9 @@ class TripRequest(BaseModel):
     days: int
     travelers: str
     interests: str
+    date: str = "בקרוב"
+    budget: str = "בינוני / משפחתי"
+    pace: str = "מאוזן"
 
 @app.post("/api/generate-trip")
 def generate_trip(request: TripRequest):
@@ -33,15 +36,17 @@ def generate_trip(request: TripRequest):
         raise HTTPException(status_code=500, detail="מפתח ה-API של Gemini אינו מוגדר בשרת.")
     
     try:
-        # שימוש במודל המתאים ליצירת תוכן
         model = genai.GenerativeModel('gemini-1.5-flash')
         
         prompt = f"""
         צור מסלול טיול מפורט עבור היעד '{request.destination}' למשך {request.days} ימים.
+        תאריך הטיול: {request.date}.
         המסלול מיועד עבור: {request.travelers}.
+        תקציב מועדף: {request.budget}.
+        קצב הטיול: {request.pace}.
         תחומי עניין עיקריים: {request.interests}.
         
-        חובה להחזיר את התשובה אך ורק במבנה JSON תקין (ללא מעטפות טקסט נוספות כמו markdown markdown) בדיוק במבנה הבא:
+        חובה להחזיר את התשובה אך ורק במבנה JSON תקין (ללא מעטפות טקסט נוספות כמו markdown) בדיוק במבנה הבא:
         {{
           "itinerary": [
             {{
@@ -68,7 +73,6 @@ def generate_trip(request: TripRequest):
         response = model.generate_content(prompt)
         text_response = response.text.strip()
         
-        # ניקוי מעטפות קוד אם ה-AI הוסיף בטעות
         if text_response.startswith("```json"):
             text_response = text_response[7:]
         if text_response.endswith("```"):
