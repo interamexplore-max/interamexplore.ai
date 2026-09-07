@@ -32,85 +32,60 @@ async def generate_trip(request: TripRequest):
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=500, detail="מפתח ה-API אינו מוגדר ב-Render.")
     
+    if request.language == "English":
+        prompt = f"""
+        Create a travel itinerary for '{request.destination}' for {request.days} days in English only.
+        Return ONLY a raw JSON object (no markdown formatting, no code blocks like ```json) with this exact structure:
+        {{
+          "itinerary": [
+            {{
+              "day_number": 1,
+              "title": "Day title in English",
+              "activities": [
+                {{
+                  "time": "09:00",
+                  "place": "Place name",
+                  "description": "Description"
+                }}
+              ]
+            }}
+          ]
+        }}
+        Make sure there are exactly {request.days} days.
+        """
+    else:
+        prompt = f"""
+        צור מסלול טיול ליעד '{request.destination}' למשך {request.days} ימים בעברית בלבד.
+        החזר אך ורק אובייקט JSON טהור (ללא עיצוב markdown, ללא ```json) במבנה הבא בדיוק:
+        {{
+          "itinerary": [
+            {{
+              "day_number": 1,
+              "title": "כותרת ליום בעברית",
+              "activities": [
+                {{
+                  "time": "09:00",
+                  "place": "שם המקום",
+                  "description": "תיאור"
+                }}
+              ]
+            }}
+          ]
+        }}
+        וודא שיש בדיוק {request.days} ימים.
+        """
+
+    # שימוש במודל העדכני gemini-2.5-flash
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+    payload = {
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }]
+    }
+
     async with httpx.AsyncClient(timeout=30.0) as client:
-        # שלב 1: שאל את גוגל איזה מודלים זמינים כרגע בחשבון שלך
-        models_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_API_KEY}"
         try:
-            models_res = await client.get(models_url)
-            if models_res.status_code != 200:
-                raise HTTPException(status_code=500, detail=f"שגיאה באיתור מודלים: {models_res.text}")
-            
-            models_data = models_res.json()
-            # חפש מודל שתומך ביצירת תוכן (generateContent)
-            available_model = None
-            for m in models_data.get("models", []):
-                methods = m.get("supportedGenerationMethods", [])
-                name = m.get("name", "")
-                if "generateContent" in methods:
-                    available_model = name # לדוגמה: models/gemini-1.5-flash או דומה
-                    break
-            
-            if not available_model:
-                available_model = "models/gemini-1.5-flash" # ברירת מחדל אם לא נמצא
-            
-        except Exception as e:
-            print(f"Model discovery error: {str(e)}")
-            available_model = "models/gemini-1.5-flash"
-
-        # שלב 2: בניית הפרומפט
-        if request.language == "English":
-            prompt = f"""
-            Create a travel itinerary for '{request.destination}' for {request.days} days in English only.
-            Return ONLY a raw JSON object (no markdown formatting, no code blocks like ```json) with this exact structure:
-            {{
-              "itinerary": [
-                {{
-                  "day_number": 1,
-                  "title": "Day title in English",
-                  "activities": [
-                    {{
-                      "time": "09:00",
-                      "place": "Place name",
-                      "description": "Description"
-                    }}
-                  ]
-                }}
-              ]
-            }}
-            Make sure there are exactly {request.days} days.
-            """
-        else:
-            prompt = f"""
-            צור מסלול טיול ליעד '{request.destination}' למשך {request.days} ימים בעברית בלבד.
-            החזר אך ורק אובייקט JSON טהור (ללא עיצוב markdown, ללא ```json) במבנה הבא בדיוק:
-            {{
-              "itinerary": [
-                {{
-                  "day_number": 1,
-                  "title": "כותרת ליום בעברית",
-                  "activities": [
-                    {{
-                      "time": "09:00",
-                      "place": "שם המקום",
-                      "description": "תיאור"
-                    }}
-                  ]
-                }}
-              ]
-            }}
-            וודא שיש בדיוק {request.days} ימים.
-            """
-
-        # שלב 3: שליחת הבקשה למודל שנמצא אוטומטית
-        generate_url = f"https://generativelanguage.googleapis.com/v1beta/{available_model}:generateContent?key={GEMINI_API_KEY}"
-        payload = {
-            "contents": [{
-                "parts": [{"text": prompt}]
-            }]
-        }
-
-        try:
-            response = await client.post(generate_url, json=payload)
+            response = await client.post(url, json=payload)
             if response.status_code != 200:
                 print(f"Gemini API error: {response.text}")
                 raise HTTPException(status_code=500, detail=f"שגיאה מתשובת גוגל: {response.text}")
