@@ -2,23 +2,24 @@ import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 import json
 
-app = FastAPI(title="Interam AI Trip Planner API")
+app = FastAPI()
 
+# --- הגדרת CORS שמאפשרת לאתר שלך לדבר עם השרת ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # מאפשר גישה מכל דומיין ובפרט מהאתר שלך
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# שליפת מפתח ה-API בצורה מאובטחת מהסביבה של השרת
-api_key = os.environ.get("GEMINI_API_KEY")
-client = genai.Client(api_key=api_key)
+# הגדרת מפתח ה-API מתוך משתני הסביבה של Render
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 class TripRequest(BaseModel):
     destination: str
@@ -27,39 +28,55 @@ class TripRequest(BaseModel):
     interests: str
 
 @app.post("/api/generate-trip")
-async def generate_trip(request: TripRequest):
-    prompt = f"""
-    אתה מתכנן טיולים מקצועי ומומחה בסוכנות נסיעות. צור מסלול טיול מפורט ליעד '{request.destination}' במשך {request.days} ימים.
-    הרכב הנוסעים: {request.travelers}.
-    תחומי עניין עיקריים: {request.interests}.
+def generate_trip(request: TripRequest):
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="מפתח ה-API של Gemini אינו מוגדר בשרת.")
     
-    הקפד על:
-    1. חלוקה גאוגרפית הגיונית לכל יום (ללא נסיעות ארוכות מדי באותו יום).
-    2. שילוב אטרקציות ופעילויות שמתאימות במדויק להרכב הנוסעים.
-    3. תיאור קצר ומושך לכל פעילות כולל שעה מומלצת (למשל: 09:00, 13:00, 16:00).
-    
-    עליך להחזיר את התשובה אך ורק במבנה JSON חוקי המכיל מערך בשם 'itinerary', שכל איבר בו מייצג יום וכולל:
-    - day_number (מספר היום, מספר שלם)
-    - title (כותרת קצרה ליום, למשל: "הגעה וסיור היכרות באגמים")
-    - activities (מערך של פעילויות, שלכל אחת יש time, place, ו-description).
-    """
-
     try:
-        response = client.models.generate_content(
-            model='gemini-3.5-flash',
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-            ),
-        )
+        # שימוש במודל המתאים ליצירת תוכן
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
-        itinerary_data = json.loads(response.text)
-        return itinerary_data
+        prompt = f"""
+        צור מסלול טיול מפורט עבור היעד '{request.destination}' למשך {request.days} ימים.
+        המסלול מיועד עבור: {request.travelers}.
+        תחומי עניין עיקריים: {request.interests}.
+        
+        חובה להחזיר את התשובה אך ורק במבנה JSON תקין (ללא מעטפות טקסט נוספות כמו markdown markdown) בדיוק במבנה הבא:
+        {{
+          "itinerary": [
+            {{
+              "day_number": 1,
+              "title": "כותרת קצרה ליום הראשון (למשל: הגעה וסיור היכרות)",
+              "activities": [
+                {{
+                  "time": "09:00",
+                  "place": "שם המקום או האטרקציה",
+                  "description": "תיאור קצרצר על הפעילות באותו זמן"
+                }},
+                {{
+                  "time": "13:00",
+                  "place": "שם המסעדה או הפעילות",
+                  "description": "תיאור קצרצר"
+                }}
+              ]
+            }}
+          ]
+        }}
+        דאג שיהיו בדיוק {request.days} אובייקטים במערך ה-itinerary, עבור כל יום ויום מ-1 עד {request.days}.
+        """
+
+        response = model.generate_content(prompt)
+        text_response = response.text.strip()
+        
+        # ניקוי מעטפות קוד אם ה-AI הוסיף בטעות
+        if text_response.startswith("```json"):
+            text_response = text_response[7:]
+        if text_response.endswith("```"):
+            text_response = text_response[:-3]
+            
+        trip_data = json.loads(text_response.strip())
+        return trip_data
 
     except Exception as e:
-        print(f"שגיאה בייצור המסלול: {e}")
-        raise HTTPException(status_code=500, detail="אירעה שגיאה בייצור המסלול באמצעות ה-AI.")
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+        print(f"Error generating trip: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"שגיאה ביצירת המסלול: {str(e)}")
