@@ -33,9 +33,9 @@ async def generate_trip(request: TripRequest):
         raise HTTPException(status_code=500, detail="מפתח ה-API אינו מוגדר ב-Render.")
     
     async with httpx.AsyncClient(timeout=30.0) as client:
-        # שלב 1: איתור דינמי של מודל זמין מחשבון ה-API שלך
+        # איתור דינמי של מודל זמין מחשבון ה-API
         models_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_API_KEY}"
-        model_name = "models/gemini-1.5-flash" # ברירת מחדל
+        model_name = "models/gemini-1.5-flash"
         try:
             models_res = await client.get(models_url)
             if models_res.status_code == 200:
@@ -47,7 +47,6 @@ async def generate_trip(request: TripRequest):
         except Exception as e:
             print(f"Model lookup warning: {e}")
 
-        # שלב 2: בניית הפרומפט
         if request.language == "English":
             prompt = f"""
             Create a travel itinerary for '{request.destination}' for {request.days} days in English only.
@@ -91,7 +90,6 @@ async def generate_trip(request: TripRequest):
             וודא שיש בדיוק {request.days} ימים.
             """
 
-        # שלב 3: שליחת הבקשה למודל שאותר בפועל
         url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={GEMINI_API_KEY}"
         payload = {
             "contents": [{
