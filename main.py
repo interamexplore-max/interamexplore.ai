@@ -33,70 +33,72 @@ class TripRequest(BaseModel):
 @app.post("/api/generate-trip")
 def generate_trip(request: TripRequest):
     if not GEMINI_API_KEY:
-        print("ERROR: GEMINI_API_KEY is missing!")
         raise HTTPException(status_code=500, detail="מפתח ה-API אינו מוגדר ב-Render.")
     
-    try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        
-        if request.language == "English":
-            prompt = f"""
-            Create a travel itinerary for '{request.destination}' for {request.days} days in English only.
-            Return ONLY a raw JSON object (no markdown formatting, no code blocks like ```json) with this exact structure:
+    # שימוש במודל היציב והזמין ביותר ב-API
+    model = genai.GenerativeModel('gemini-pro')
+    
+    if request.language == "English":
+        prompt = f"""
+        Create a travel itinerary for '{request.destination}' for {request.days} days in English only.
+        Return ONLY a raw JSON object (no markdown formatting, no code blocks like ```json) with this exact structure:
+        {{
+          "itinerary": [
             {{
-              "itinerary": [
+              "day_number": 1,
+              "title": "Day title in English",
+              "activities": [
                 {{
-                  "day_number": 1,
-                  "title": "Day title in English",
-                  "activities": [
-                    {{
-                      "time": "09:00",
-                      "place": "Place name",
-                      "description": "Description"
-                    }}
-                  ]
+                  "time": "09:00",
+                  "place": "Place name",
+                  "description": "Description"
                 }}
               ]
             }}
-            Make sure there are exactly {request.days} days.
-            """
-        else:
-            prompt = f"""
-            צור מסלול טיול ליעד '{request.destination}' למשך {request.days} ימים בעברית בלבד.
-            החזר אך ורק אובייקט JSON טהור (ללא עיצוב markdown, ללא ```json) במבנה הבא בדיוק:
+          ]
+        }}
+        Make sure there are exactly {request.days} days.
+        """
+    else:
+        prompt = f"""
+        צור מסלול טיול ליעד '{request.destination}' למשך {request.days} ימים בעברית בלבד.
+        החזר אך ורק אובייקט JSON טהור (ללא עיצוב markdown, ללא ```json) במבנה הבא בדיוק:
+        {{
+          "itinerary": [
             {{
-              "itinerary": [
+              "day_number": 1,
+              "title": "כותרת ליום בעברית",
+              "activities": [
                 {{
-                  "day_number": 1,
-                  "title": "כותרת ליום בעברית",
-                  "activities": [
-                    {{
-                      "time": "09:00",
-                      "place": "שם המקום",
-                      "description": "תיאור"
-                    }}
-                  ]
+                  "time": "09:00",
+                  "place": "שם המקום",
+                  "description": "תיאור"
                 }}
               ]
             }}
-            וודא שיש בדיוק {request.days} ימים.
-            """
+          ]
+        }}
+        וודא שיש בדיוק {request.days} ימים.
+        """
 
-        print(f"Sending prompt for {request.destination}, {request.days} days...")
-        response = model.generate_content(prompt)
-        text_response = response.text.strip()
-        print(f"Raw AI response received: {text_response[:100]}...")
-        
-        if text_response.startswith("```json"):
-            text_response = text_response[7:]
-        if text_response.startswith("```"):
-            text_response = text_response[3:]
-        if text_response.endswith("```"):
-            text_response = text_response[:-3]
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = model.generate_content(prompt)
+            text_response = response.text.strip()
             
-        trip_data = json.loads(text_response.strip())
-        return trip_data
+            if text_response.startswith("```json"):
+                text_response = text_response[7:]
+            if text_response.startswith("```"):
+                text_response = text_response[3:]
+            if text_response.endswith("```"):
+                text_response = text_response[:-3]
+                
+            trip_data = json.loads(text_response.strip())
+            return trip_data
 
-    except Exception as e:
-        print(f"CRITICAL ERROR in generate_trip: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"שגיאה בשרת: {str(e)}")
+        except Exception as e:
+            print(f"Attempt {attempt + 1} failed: {str(e)}")
+            if attempt == max_retries - 1:
+                raise HTTPException(status_code=500, detail=f"שגיאה ביצירת המסלול: {str(e)}")
+            time.sleep(1.5)
