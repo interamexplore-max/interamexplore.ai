@@ -37,38 +37,63 @@ def generate_trip(request: TripRequest):
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
         
-        prompt = f"""
-        Create a detailed travel itinerary for the destination '{request.destination}' for {request.days} days.
-        Language of response: {request.language}.
-        Trip Date: {request.date}.
-        Travelers: {request.travelers}.
-        Budget: {request.budget}.
-        Pace: {request.pace}.
-        Interests: {request.interests}.
-        
-        You MUST return the response ONLY as a valid JSON object (no markdown formatting like ```json, just raw JSON) matching this exact structure:
-        {{
-          "itinerary": [
+        # התאמת שפת ההנחיה באופן מלא לפי בחירת המשתמש
+        if request.language == "English":
+            prompt = f"""
+            You are a professional travel agent. Create a complete, detailed travel itinerary for the destination '{request.destination}' for {request.days} days.
+            CRITICAL RULE: The ENTIRE response must be strictly in English. Every single word, including day titles, activity places, and descriptions, must be written in English only. Do not use any Hebrew words.
+            
+            Trip Date: {request.date}.
+            Travelers: {request.travelers}.
+            Budget: {request.budget}.
+            Pace: {request.pace}.
+            Interests: {request.interests}.
+            
+            Return the response ONLY as a valid JSON object (no markdown formatting like ```json, just raw JSON) matching this exact structure:
             {{
-              "day_number": 1,
-              "title": "Short title for day 1",
-              "activities": [
+              "itinerary": [
                 {{
-                  "time": "09:00",
-                  "place": "Place or attraction name",
-                  "description": "Short description of the activity"
-                }},
-                {{
-                  "time": "13:00",
-                  "place": "Restaurant or activity",
-                  "description": "Short description"
+                  "day_number": 1,
+                  "title": "Short title for day 1 in English",
+                  "activities": [
+                    {{
+                      "time": "09:00",
+                      "place": "Place or attraction name in English",
+                      "description": "Short description of the activity in English"
+                    }}
+                  ]
                 }}
               ]
             }}
-          ]
-        }}
-        Make sure there are exactly {request.days} objects in the itinerary array, for each day from 1 to {request.days}. All text fields (titles, places, descriptions) must be written in {request.language}.
-        """
+            Make sure there are exactly {request.days} objects in the itinerary array, for each day from 1 to {request.days}.
+            """
+        else:
+            prompt = f"""
+            צור מסלול טיול מפורט עבור היעד '{request.destination}' למשך {request.days} ימים בעברית בלבד.
+            תאריך הטיול: {request.date}.
+            המסלול מיועד עבור: {request.travelers}.
+            תקציב מועדף: {request.budget}.
+            קצב הטיול: {request.pace}.
+            תחומי עניין עיקריים: {request.interests}.
+            
+            חובה להחזיר את התשובה אך ורק במבנה JSON תקין (ללא מעטפות טקסט נוספות כמו markdown) בדיוק במבנה הבא:
+            {{
+              "itinerary": [
+                {{
+                  "day_number": 1,
+                  "title": "כותרת קצרה ליום הראשון בעברית",
+                  "activities": [
+                    {{
+                      "time": "09:00",
+                      "place": "שם המקום בעברית",
+                      "description": "תיאור הפעילות בעברית"
+                    }}
+                  ]
+                }}
+              ]
+            }}
+            דאג שיהיו בדיוק {request.days} אובייקטים במערך ה-itinerary, עבור כל יום ויום מ-1 עד {request.days}.
+            """
 
         response = model.generate_content(prompt)
         text_response = response.text.strip()
