@@ -38,10 +38,12 @@ async def generate_trip(request: TripRequest):
     
     is_eng = request.language == "English"
     
+    json_structure = '{"itinerary": [{"day_number": 1, "title": "Day Title", "activities": [{"time": "09:00", "place": "Place Name", "description": "Description"}]}]}'
+    
     if is_eng:
-        prompt = f"Create a travel itinerary for {request.destination} for {request.days} days. Return ONLY a raw JSON object with this exact structure: {{\"itinerary\": [{\"day_number\": 1, \"title\": \"Day Title\", \"activities\": [{\"time\": \"09:00\", \"place\": \"Place Name\", \"description\": \"Description\"}]}]}}"
+        prompt = f"Create a travel itinerary for {request.destination} for {request.days} days. Return ONLY a raw JSON object with this exact structure: {json_structure}"
     else:
-        prompt = f"צור מסלול טיול ליעד {request.destination} למשך {request.days} ימים בעברית בלבד. החזר אך ורק אובייקט JSON טהור במבנה הבא: {{\"itinerary\": [{\"day_number\": 1, \"title\": \"כותרת ליום\", \"activities\": [{\"time\": \"09:00\", \"place\": \"שם המקום\", \"description\": \"תיאור הפעילות\"}]}]}}"
+        prompt = f"צור מסלול טיול ליעד {request.destination} למשך {request.days} ימים בעברית בלבד. החזר אך ורק אובייקט JSON טהור במבנה הבא: {json_structure}"
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
     payload = {
@@ -60,7 +62,6 @@ async def generate_trip(request: TripRequest):
             res_data = response.json()
             text_response = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
             
-            # ניקוי מעטפות Markdown במידה וקיימות
             if text_response.startswith("```json"):
                 text_response = text_response[7:]
             if text_response.startswith("```"):
@@ -70,22 +71,19 @@ async def generate_trip(request: TripRequest):
                 
             text_response = text_response.strip()
             
-            # ניסיון פענוח ה-JSON
             try:
                 parsed_data = json.loads(text_response)
                 return parsed_data
             except json.JSONDecodeError:
-                # מנגנון גיבוי למקרה שהמודל החזיר טקסט חלקי, כדי למנוע שגיאת 500
-                print("Warning: JSON decode failed. Returning fallback structure.")
                 return {
                     "itinerary": [
                         {
                             "day_number": i + 1,
-                            "title": f"Day {i + 1} in {request.destination}" if is_eng else f"יום {i + 1} ב{request.destination}",
+                            "title": f"Day {i + 1}" if is_eng else f"יום {i + 1}",
                             "activities": [
                                 {
                                     "time": "09:00",
-                                    "place": "City Center Tour" if is_eng else "סיור במרכז העיר",
+                                    "place": request.destination,
                                     "description": text_response[:200]
                                 }
                             ]
