@@ -1,9 +1,10 @@
 import os
 import json
-import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from google import genai
+from google.genai import types
 
 app = FastAPI()
 
@@ -17,6 +18,9 @@ app.add_middleware(
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
+# אתחול הלקוח הרשמי של גוגל לפי ההנחיות החדשות
+client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+
 class TripRequest(BaseModel):
     language: str = "עברית"
     destination: str
@@ -29,7 +33,7 @@ class TripRequest(BaseModel):
 
 @app.post("/api/generate-trip")
 async def generate_trip(request: TripRequest):
-    if not GEMINI_API_KEY:
+    if not GEMINI_API_KEY or not client:
         raise HTTPException(status_code=500, detail="מפתח ה-API אינו מוגדר ב-Render.")
     
     if request.language == "English":
@@ -75,34 +79,25 @@ async def generate_trip(request: TripRequest):
         וודא שיש בדיוק {request.days} ימים.
         """
 
-    # שימוש במודל העדכני gemini-2.5-flash
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
-    payload = {
-        "contents": [{
-            "parts": [{"text": prompt}]
-        }]
-    }
-
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        try:
-            response = await client.post(url, json=payload)
-            if response.status_code != 200:
-                print(f"Gemini API error: {response.text}")
-                raise HTTPException(status_code=500, detail=f"שגיאה מתשובת גוגל: {response.text}")
+    try:
+        # שימוש בספרייה הרשמית והמודל העדכני ביותר
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+        )
+        
+        text_response = response.text.strip()
+        
+        if text_response.startswith("```json"):
+            text_response = text_response[7:]
+        if text_response.startswith("```"):
+            text_response = text_response[3:]
+        if text_response.endswith("```"):
+            text_response = text_response[:-3]
             
-            res_data = response.json()
-            text_response = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
-            
-            if text_response.startswith("```json"):
-                text_response = text_response[7:]
-            if text_response.startswith("```"):
-                text_response = text_response[3:]
-            if text_response.endswith("```"):
-                text_response = text_response[:-3]
-                
-            trip_data = json.loads(text_response.strip())
-            return trip_data
+        trip_data = json.loads(text_response.strip())
+        return trip_data
 
-        except Exception as e:
-            print(f"Error: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"שגיאה בשרת: {str(e)}")
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"שגיאה בשרת: {str(e)}")
