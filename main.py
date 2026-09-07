@@ -1,10 +1,10 @@
 import os
 import time
+import json
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import google.generativeai as genai
-import json
 
 app = FastAPI()
 
@@ -17,8 +17,6 @@ app.add_middleware(
 )
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
 
 class TripRequest(BaseModel):
     language: str = "עברית"
@@ -31,12 +29,9 @@ class TripRequest(BaseModel):
     pace: str = "מאוזן"
 
 @app.post("/api/generate-trip")
-def generate_trip(request: TripRequest):
+async def generate_trip(request: TripRequest):
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=500, detail="מפתח ה-API אינו מוגדר ב-Render.")
-    
-    # שימוש במודל היציב והזמין ביותר ב-API
-    model = genai.GenerativeModel('gemini-pro')
     
     if request.language == "English":
         prompt = f"""
@@ -81,11 +76,22 @@ def generate_trip(request: TripRequest):
         וודא שיש בדיוק {request.days} ימים.
         """
 
-    max_retries = 3
-    for attempt in range(max_retries):
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    payload = {
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }]
+    }
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
         try:
-            response = model.generate_content(prompt)
-            text_response = response.text.strip()
+            response = await client.post(url, json=payload)
+            if response.status_code != 200:
+                print(f"Gemini API error: {response.text}")
+                raise HTTPException(status_code=500, detail=f"שגיאה מתשובת גוגל: {response.text}")
+            
+            res_data = response.json()
+            text_response = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
             
             if text_response.startswith("```json"):
                 text_response = text_response[7:]
@@ -98,7 +104,5 @@ def generate_trip(request: TripRequest):
             return trip_data
 
         except Exception as e:
-            print(f"Attempt {attempt + 1} failed: {str(e)}")
-            if attempt == max_retries - 1:
-                raise HTTPException(status_code=500, detail=f"שגיאה ביצירת המסלול: {str(e)}")
-            time.sleep(1.5)
+            print(f"Error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"שגיאה בשרת: {str(e)}")
