@@ -29,82 +29,55 @@ class TripRequest(BaseModel):
 
 @app.get("/")
 def read_root():
-    return {"status": "Interam Explore API is running successfully!"}
+    return {"status": "OK"}
 
 @app.post("/api/generate-trip")
 async def generate_trip(request: TripRequest):
     if not GEMINI_API_KEY:
-        raise HTTPException(status_code=500, detail="מפתח ה-API אינו מוגדר ב-Render.")
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY is missing")
     
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        models_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_API_KEY}"
-        model_name = "models/gemini-1.5-flash"
-        try:
-            models_res = await client.get(models_url)
-            if models_res.status_code == 200:
-                models_data = models_res.json()
-                for m in models_data.get("models", []):
-                    if "generateContent" in m.get("supportedGenerationMethods", []):
-                        model_name = m.get("name")
-                        break
-        except Exception as e:
-            print(f"Model lookup warning: {e}")
+    if request.language == "English":
+        prompt = f"""Create a travel itinerary for '{request.destination}' for {request.days} days in English. 
+Return ONLY a valid JSON object without any markdown formatting (no ```json):
+{{
+  "itinerary": [
+    {{
+      "day_number": 1,
+      "title": "Day title",
+      "activities": [
+        {{"time": "09:00", "place": "Place name", "description": "Description"}}
+      ]
+    }}
+  ]
+}}"""
+    else:
+        prompt = f"""צור מסלול טיול ליעד '{request.destination}' למשך {request.days} ימים בעברית בלבד. 
+החזר אך ורק אובייקט JSON תקין ללא שום מעטפת markdown (ללא ```json):
+{{
+  "itinerary": [
+    {{
+      "day_number": 1,
+      "title": "כותרת ליום",
+      "activities": [
+        {{"time": "09:00", "place": "שם המקום", "description": "תיאור הפעילות"}}
+      ]
+    }}
+  ]
+}}"""
 
-        if request.language == "English":
-            prompt = f"""
-            Create a travel itinerary for '{request.destination}' for {request.days} days in English only.
-            Return ONLY a raw JSON object (no markdown formatting, no code blocks like ```json) with this exact structure:
-            {{
-              "itinerary": [
-                {{
-                  "day_number": 1,
-                  "title": "Day title in English",
-                  "activities": [
-                    {{
-                      "time": "09:00",
-                      "place": "Place name",
-                      "description": "Description"
-                    }}
-                  ]
-                }}
-              ]
-            }}
-            Make sure there are exactly {request.days} days.
-            """
-        else:
-            prompt = f"""
-            צור מסלול טיול ליעד '{request.destination}' למשך {request.days} ימים בעברית בלבד.
-            החזר אך ורק אובייקט JSON טהור (ללא עיצוב markdown, ללא ```json) במבנה הבא בדיוק:
-            {{
-              "itinerary": [
-                {{
-                  "day_number": 1,
-                  "title": "כותרת ליום בעברית",
-                  "activities": [
-                    {{
-                      "time": "09:00",
-                      "place": "שם המקום",
-                      "description": "תיאור"
-                    }}
-                  ]
-                }}
-              ]
-            }}
-            וודא שיש בדיוק {request.days} ימים.
-            """
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    payload = {
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }]
+    }
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={GEMINI_API_KEY}"
-        payload = {
-            "contents": [{
-                "parts": [{"text": prompt}]
-            }]
-        }
-
+    async with httpx.AsyncClient(timeout=45.0) as client:
         try:
             response = await client.post(url, json=payload)
             if response.status_code != 200:
-                print(f"Gemini API Error: {response.text}")
-                raise HTTPException(status_code=500, detail=f"שגיאה מתשובת גוגל: {response.text}")
+                print(f"Gemini API Error details: {response.text}")
+                raise HTTPException(status_code=500, detail=f"Google API Error: {response.text}")
             
             res_data = response.json()
             text_response = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
@@ -116,9 +89,8 @@ async def generate_trip(request: TripRequest):
             if text_response.endswith("```"):
                 text_response = text_response[:-3]
                 
-            trip_data = json.loads(text_response.strip())
-            return trip_data
-
+            return json.loads(text_response.strip())
+            
         except Exception as e:
-            print(f"Execution Error: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"שגיאה בשרת: {str(e)}")
+            print(f"Server Exception: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
