@@ -38,7 +38,8 @@ async def generate_trip(data: TripRequest):
     You are an expert travel agent at InteramExplore. Create a detailed travel itinerary for {data.destination} for {data.days} days.
     Travelers: {data.travelers}. Date: {data.date}. Budget: {data.budget}. Pace: {data.pace}. Interests: {data.interests}.
     Language: {data.language}.
-    Structure the output strictly as a JSON object with this schema:
+    
+    CRITICAL REQUIREMENT: Structure the output strictly as a JSON object with this exact schema:
     {{
       "itinerary": [
         {{
@@ -69,6 +70,7 @@ async def generate_trip(data: TripRequest):
             
         return json.loads(cleaned_text.strip())
     except Exception as e:
+        print(f"Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/")
