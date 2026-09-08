@@ -67,8 +67,7 @@ async def generate_trip(data: TripRequest):
     """
 
     try:
-        # שימוש במודל gemini-pro הוותיק והיציב ביותר שלא מקפיץ שגיאות 404
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(prompt)
         
         cleaned_text = response.text.strip()
