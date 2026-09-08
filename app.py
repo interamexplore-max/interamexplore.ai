@@ -34,39 +34,27 @@ async def generate_trip(data: TripRequest):
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=500, detail="Gemini API Key is missing on the server.")
 
-    # הנחיה מפורשת ל-AI לייצר את הפלט בשפה שנבחרה
     prompt = f"""
-    You are an expert, professional travel agent and senior tour guide at InteramExplore.
-    Create a highly detailed, rich, and deeply personalized travel itinerary for {data.destination} for {data.days} days.
-    Travelers: {data.travelers}.
-    Travel Date: {data.date}.
-    Budget Level: {data.budget}.
-    Pace: {data.pace}.
-    Interests & Preferences: {data.interests}.
-    
-    CRITICAL LANGUAGE REQUIREMENT:
-    You MUST generate the entire output (titles, descriptions, times, notes) strictly in the following language: {data.language}. 
-
-    CRITICAL REQUIREMENTS FOR THE ITINERARY:
-    1. Avoid generic descriptions. Every single activity MUST include real, specific, and well-known place names (e.g., specific restaurants, cafes, museums, viewpoints, parks, or hotels).
-    2. For each day, provide a rich breakdown of times (Morning, Afternoon, Evening) with specific names of locations.
-    3. Structure the output strictly as a JSON object with the following schema:
+    You are an expert travel agent at InteramExplore. Create a detailed travel itinerary for {data.destination} for {data.days} days.
+    Travelers: {data.travelers}. Date: {data.date}. Budget: {data.budget}. Pace: {data.pace}. Interests: {data.interests}.
+    Language: {data.language}.
+    Structure the output strictly as a JSON object with this schema:
     {{
       "itinerary": [
         {{
           "day_number": 1,
-          "title": "Short catchy title for the day in {data.language}",
+          "title": "Title in {data.language}",
           "activities": [
             {{
               "time": "09:00",
-              "place": "Real specific name of place/attraction/restaurant",
-              "description": "Detailed, rich description in {data.language} of what to do there, tips, and why it fits the traveler."
+              "place": "Place name",
+              "description": "Description in {data.language}"
             }}
           ]
         }}
       ]
     }}
-    Return ONLY valid JSON. No markdown backticks outside, no extra text.
+    Return ONLY valid JSON. No markdown backticks outside.
     """
 
     try:
@@ -79,11 +67,8 @@ async def generate_trip(data: TripRequest):
         if cleaned_text.endswith("```"):
             cleaned_text = cleaned_text[:-3]
             
-        itinerary_data = json.loads(cleaned_text.strip())
-        return itinerary_data
-
+        return json.loads(cleaned_text.strip())
     except Exception as e:
-        print(f"Error generating itinerary: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/")
