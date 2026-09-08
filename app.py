@@ -2,7 +2,8 @@ import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 import json
 
 app = FastAPI()
@@ -16,8 +17,7 @@ app.add_middleware(
 )
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 class TripRequest(BaseModel):
     destination: str
@@ -31,7 +31,7 @@ class TripRequest(BaseModel):
 
 @app.post("/api/generate-trip")
 async def generate_trip(data: TripRequest):
-    if not GEMINI_API_KEY:
+    if not client:
         raise HTTPException(status_code=500, detail="Gemini API Key is missing on the server.")
 
     prompt = f"""
@@ -59,8 +59,10 @@ async def generate_trip(data: TripRequest):
     """
 
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+        )
         
         cleaned_text = response.text.strip()
         if cleaned_text.startswith("```json"):
