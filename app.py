@@ -83,8 +83,8 @@ async def generate_trip(data: TripRequest):
     """
 
     try:
-        model = genai.GenerativeModel('gemini-pro')
-        response = model.generate_content(prompt)
+model = genai.GenerativeModel('gemini-2.5-flash')
+response = model.generate_content(prompt)
         
         cleaned_text = response.text.strip()
         # ניקוי בטוח של מעטפות מרקדון במידה והמודל בכל זאת מחזיר כאלו
