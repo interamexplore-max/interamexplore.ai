@@ -2,4 +2,4 @@ fastapi
 uvicorn
 httpx
 pydantic
-google-generativeai
+google-generativeai==0.8.6
