@@ -1,1 +1,2 @@
-
+[phases.build]
+cmds = ["pip install --only-binary=:all: -r requirements.txt"]
