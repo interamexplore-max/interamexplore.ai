@@ -1,5 +1,4 @@
-fastapi
-uvicorn
-httpx
-pydantic
+fastapi==0.110.0
+uvicorn==0.28.0
 google-generativeai==0.8.6
+pydantic==2.6.4
