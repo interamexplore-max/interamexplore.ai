@@ -2,12 +2,11 @@ import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from google import genai
+import google.generativeai as genai
 import json
 
 app = FastAPI()
 
-# הפעלת CORS כדי שה-Frontend יוכל לדבר עם השרת בצורה חלקה
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,7 +15,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# הגדרת מפתח ה-API של Gemini מתוך משתני הסביבה ב-Render
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
@@ -69,8 +67,8 @@ async def generate_trip(data: TripRequest):
     """
 
     try:
-        # שימוש במודל המקורי שעבד אצלנו
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # שימוש במודל gemini-pro הוותיק והיציב ביותר שלא מקפיץ שגיאות 404
+        model = genai.GenerativeModel('gemini-pro')
         response = model.generate_content(prompt)
         
         cleaned_text = response.text.strip()
